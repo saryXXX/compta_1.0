@@ -1,0 +1,51 @@
+{
+  "appId": "com.financetunisie.comptabilite",
+  "productName": "Finance Tunisie",
+  "directories": {
+    "output": "dist-electron"
+  },
+  "files": [
+    "dist/**/*",
+    "dist-server/**/*",
+    "electron/**/*",
+    "assets/**/*",
+    "prisma/**/*"
+  ],
+  "extraResources": [
+    {
+      "from": "prisma/dev.db",
+      "to": "prisma/dev.db"
+    }
+  ],
+  "asar": true,
+  "asarUnpack": [
+    "**/prisma/client/**/*",
+    "**/prisma/dev.db"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      },
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "assets/icon.png"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Finance Tunisie",
+    "uninstallDisplayName": "Finance Tunisie (Comptabilité & Fiscalité)",
+    "artifactName": "FinanceTunisie-Setup-${version}.exe"
+  },
+  "portable": {
+    "artifactName": "FinanceTunisie-Portable.exe"
+  }
+}
+

@@ -1,0 +1,400 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./client"
+}
+
+model Tenant {
+  id            String   @id @default(uuid())
+  name          String
+  taxId         String   @map("tax_id")
+  tradeRegister String?  @map("trade_register")
+  vatRegime     String   @default("ASSUJETTI_TOTAL") @map("vat_regime")
+  address       String?
+  city          String   @default("Tunis")
+  phone         String?
+  email         String?
+  currency      String   @default("TND")
+  isDeleted     Boolean  @default(false) @map("is_deleted")
+  deletedAt     String?  @map("deleted_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  users         User[]
+  parties       Party[]
+  accounts      Account[]
+  invoices      Invoice[]
+  entries       AccountingEntry[]
+  g50Returns    TaxDeclarationG50[]
+  apPayments    ProvisionalPaymentAP[]
+  employerDecs           EmployerDeclaration[]
+  employees              Employee[]
+  payrollSlips           PayrollSlip[]
+  fixedAssets            FixedAsset[]
+  bankStatementLines     BankStatementLine[]
+  fiscalAdjustments      FiscalAdjustment[]
+
+  @@map("tenants")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  username     String   @unique
+  passwordHash String   @map("password_hash")
+  salt         String
+  fullName     String   @map("full_name")
+  role         String   @default("ADMIN")
+  permissions  String   @default("[]")
+  isDeleted    Boolean  @default(false) @map("is_deleted")
+  deletedAt    String?  @map("deleted_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sessions     Session[]
+
+  @@map("users")
+}
+
+model Session {
+  token     String   @id
+  userId    String   @map("user_id")
+  tenantId  String   @map("tenant_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Party {
+  id                     String   @id @default(uuid())
+  tenantId               String   @map("tenant_id")
+  partyType              String   @map("party_type") // CLIENT or SUPPLIER
+  name                   String
+  taxId                  String?  @map("tax_id")
+  rneNumber              String?  @map("rne_number")
+  vatStatus              String   @default("ASSUJETTI") @map("vat_status")
+  vatExemptionNumber     String?  @map("vat_exemption_number")
+  vatExemptionExpiry     String?  @map("vat_exemption_expiry")
+  address                String?
+  city                   String?
+  phone                  String?
+  email                  String?
+  defaultWithholdingRate Float    @default(0.0) @map("default_withholding_rate")
+  accountCode            String?  @map("account_code")
+  balance                Float    @default(0.0)
+  isDeleted              Boolean  @default(false) @map("is_deleted")
+  deletedAt              String?  @map("deleted_at")
+  createdAt              DateTime @default(now()) @map("created_at")
+
+  tenant                 Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoices               Invoice[]
+
+  @@index([tenantId, partyType, isDeleted])
+  @@map("parties")
+}
+
+model Account {
+  id              String   @id @default(uuid())
+  tenantId        String   @map("tenant_id")
+  accountCode     String   @map("account_code")
+  accountName     String   @map("account_name")
+  accountCategory String   @map("account_category")
+  isDeleted       Boolean  @default(false) @map("is_deleted")
+  deletedAt       String?  @map("deleted_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, accountCode])
+  @@map("chart_of_accounts")
+}
+
+model Invoice {
+  id                   String   @id @default(uuid())
+  tenantId             String   @map("tenant_id")
+  invoiceType          String   @map("invoice_type") // SALE, PURCHASE, CREDIT_NOTE
+  invoiceNumber        String   @map("invoice_number")
+  partyId              String   @map("party_id")
+  invoiceDate          String   @map("invoice_date")
+  dueDate              String   @map("due_date")
+  subtotalHt           Float    @default(0.0) @map("subtotal_ht")
+  fodecAmount          Float    @default(0.0) @map("fodec_amount")
+  vatAmount            Float    @default(0.0) @map("vat_amount")
+  stampDuty            Float    @default(0.0) @map("stamp_duty")
+  withholdingTaxAmount Float    @default(0.0) @map("withholding_tax_amount")
+  totalTtc             Float    @default(0.0) @map("total_ttc")
+  status               String   @default("VALIDATED")
+  notes                String?
+  isDeleted            Boolean  @default(false) @map("is_deleted")
+  deletedAt            String?  @map("deleted_at")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  tenant               Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  party                Party         @relation(fields: [partyId], references: [id])
+  items                InvoiceItem[]
+  entries              AccountingEntry[]
+
+  @@unique([tenantId, invoiceType, invoiceNumber])
+  @@index([tenantId, invoiceType, invoiceDate, isDeleted])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id              String   @id @default(uuid())
+  invoiceId       String   @map("invoice_id")
+  description     String
+  quantity        Float    @default(1.0)
+  unitPriceHt     Float    @default(0.0) @map("unit_price_ht")
+  discountPercent Float    @default(0.0) @map("discount_percent")
+  fodecRate       Float    @default(0.0) @map("fodec_rate")
+  fodecAmount     Float    @default(0.0) @map("fodec_amount")
+  vatRate         Float    @default(19.0) @map("vat_rate")
+  vatAmount       Float    @default(0.0) @map("vat_amount")
+  totalHt         Float    @default(0.0) @map("total_ht")
+  totalTtc        Float    @default(0.0) @map("total_ttc")
+  isDeleted       Boolean  @default(false) @map("is_deleted")
+  deletedAt       String?  @map("deleted_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_items")
+}
+
+model AccountingEntry {
+  id              String      @id @default(uuid())
+  tenantId        String      @map("tenant_id")
+  journalCode     String      @map("journal_code") // VE, AC, BQ, CA, OD
+  entryDate       String      @map("entry_date")
+  referenceNumber String      @map("reference_number")
+  description     String
+  invoiceId       String?     @map("invoice_id")
+  isDeleted       Boolean     @default(false) @map("is_deleted")
+  deletedAt       String?     @map("deleted_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+
+  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoice         Invoice?    @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  lines           EntryLine[]
+
+  @@index([tenantId, journalCode, entryDate, isDeleted])
+  @@map("accounting_entries")
+}
+
+model EntryLine {
+  id          String          @id @default(uuid())
+  entryId     String          @map("entry_id")
+  accountCode String          @map("account_code")
+  debit       Float           @default(0.0)
+  credit      Float           @default(0.0)
+  description String?
+  isDeleted   Boolean         @default(false) @map("is_deleted")
+  deletedAt   String?         @map("deleted_at")
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  entry       AccountingEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@index([accountCode, isDeleted])
+  @@map("entry_lines")
+}
+
+model TaxDeclarationG50 {
+  id                      String   @id @default(uuid())
+  tenantId                String   @map("tenant_id")
+  month                   Int
+  year                    Int
+  caTaxable19             Float    @default(0.0) @map("ca_taxable_19")
+  caTaxable13             Float    @default(0.0) @map("ca_taxable_13")
+  caTaxable7              Float    @default(0.0) @map("ca_taxable_7")
+  caExport0               Float    @default(0.0) @map("ca_export_0")
+  caExempt                Float    @default(0.0) @map("ca_exempt")
+  vatCollected19          Float    @default(0.0) @map("vat_collected_19")
+  vatCollected13          Float    @default(0.0) @map("vat_collected_13")
+  vatCollected7           Float    @default(0.0) @map("vat_collected_7")
+  vatCollectedTotal       Float    @default(0.0) @map("vat_collected_total")
+  vatDeductibleAssets     Float    @default(0.0) @map("vat_deductible_assets")
+  vatDeductibleOther      Float    @default(0.0) @map("vat_deductible_other")
+  vatCreditCarriedForward Float    @default(0.0) @map("vat_credit_carried_forward")
+  vatNetDue               Float    @default(0.0) @map("vat_net_due")
+  vatCreditGenerated      Float    @default(0.0) @map("vat_credit_generated")
+  stampDutyTotal          Float    @default(0.0) @map("stamp_duty_total")
+  tclTotal                Float    @default(0.0) @map("tcl_total")
+  fodecTotal              Float    @default(0.0) @map("fodec_total")
+  withholdingSalaries     Float    @default(0.0) @map("withholding_salaries")
+  withholdingFees         Float    @default(0.0) @map("withholding_fees")
+  withholdingRent         Float    @default(0.0) @map("withholding_rent")
+  withholdingPurchases    Float    @default(0.0) @map("withholding_purchases")
+  withholdingTotal        Float    @default(0.0) @map("withholding_total")
+  tfpTotal                Float    @default(0.0) @map("tfp_total")
+  foprolosTotal           Float    @default(0.0) @map("foprolos_total")
+  totalToPay              Float    @default(0.0) @map("total_to_pay")
+  isNil                   Boolean  @default(false) @map("is_nil")
+  status                  String   @default("DRAFT")
+  isDeleted               Boolean  @default(false) @map("is_deleted")
+  deletedAt               String?  @map("deleted_at")
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, month, year])
+  @@map("tax_declarations_g50")
+}
+
+model ProvisionalPaymentAP {
+  id                   String   @id @default(uuid())
+  tenantId             String   @map("tenant_id")
+  year                 Int
+  installmentNumber    Int      @map("installment_number") // 1, 2, 3
+  previousYearTaxBase  Float    @default(0.0) @map("previous_year_tax_base")
+  installmentGross30   Float    @default(0.0) @map("installment_gross_30")
+  withholdingDeducted  Float    @default(0.0) @map("withholding_deducted")
+  priorCreditsDeducted Float    @default(0.0) @map("prior_credits_deducted")
+  netPayable           Float    @default(0.0) @map("net_payable")
+  dueDate              String   @map("due_date")
+  paymentStatus        String   @default("PENDING") @map("payment_status")
+  notes                String?
+  isDeleted            Boolean  @default(false) @map("is_deleted")
+  deletedAt            String?  @map("deleted_at")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, year, installmentNumber])
+  @@map("provisional_payments_ap")
+}
+
+model EmployerDeclaration {
+  id                      String   @id @default(uuid())
+  tenantId                String   @map("tenant_id")
+  year                    Int
+  totalGrossSalaries      Float    @default(0.0) @map("total_gross_salaries")
+  totalIrppWithheld       Float    @default(0.0) @map("total_irpp_withheld")
+  totalFeesPaid           Float    @default(0.0) @map("total_fees_paid")
+  totalFeesWithheld       Float    @default(0.0) @map("total_fees_withheld")
+  totalRentPaid           Float    @default(0.0) @map("total_rent_paid")
+  totalRentWithheld       Float    @default(0.0) @map("total_rent_withheld")
+  totalWithholdingOverall Float    @default(0.0) @map("total_withholding_overall")
+  tejSummaryContent       String?  @map("tej_summary_content")
+  isDeleted               Boolean  @default(false) @map("is_deleted")
+  deletedAt               String?  @map("deleted_at")
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, year])
+  @@map("employer_declarations")
+}
+
+model Employee {
+  id                String        @id @default(uuid())
+  tenantId          String        @map("tenant_id")
+  cinNumber         String        @map("cin_number")
+  cnssNumber        String?       @map("cnss_number")
+  fullName          String        @map("full_name")
+  jobTitle          String        @map("job_title")
+  baseSalary        Float         @map("base_salary")
+  maritalStatus     String        @default("CELIBATAIRE") @map("marital_status")
+  dependentChildren Int           @default(0) @map("dependent_children")
+  hireDate          String        @map("hire_date")
+  isDeleted         Boolean       @default(false) @map("is_deleted")
+  deletedAt         String?       @map("deleted_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  tenant            Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payrolls          PayrollSlip[]
+
+  @@map("employees")
+}
+
+model PayrollSlip {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  employeeId     String   @map("employee_id")
+  month          Int
+  year           Int
+  grossSalary    Float    @map("gross_salary")
+  cnssEmployee   Float    @map("cnss_employee")
+  taxableSalary  Float    @map("taxable_salary")
+  irppWithheld   Float    @map("irpp_withheld")
+  cssAmount      Float    @map("css_amount")
+  cnssEmployer   Float    @map("cnss_employer")
+  tfpAmount      Float    @map("tfp_amount")
+  foprolosAmount Float    @map("foprolos_amount")
+  netSalary      Float    @map("net_salary")
+  isAccounted    Boolean  @default(false) @map("is_accounted")
+  isDeleted      Boolean  @default(false) @map("is_deleted")
+  deletedAt      String?  @map("deleted_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, employeeId, month, year])
+  @@map("payroll_slips")
+}
+
+model FixedAsset {
+  id                  String   @id @default(uuid())
+  tenantId            String   @map("tenant_id")
+  assetCode           String   @map("asset_code")
+  name                String
+  category            String   @map("category")
+  acquisitionDate     String   @map("acquisition_date")
+  commissioningDate   String   @map("commissioning_date")
+  originalValueHt     Float    @map("original_value_ht")
+  depreciationRate    Float    @map("depreciation_rate")
+  amortizationMethod  String   @default("LINEAIRE") @map("amortization_method")
+  assetAccountCode    String   @map("asset_account_code")
+  amortAccountCode    String   @map("amort_account_code")
+  dotationAccountCode String   @default("681100") @map("dotation_account_code")
+  isDeleted           Boolean  @default(false) @map("is_deleted")
+  deletedAt           String?  @map("deleted_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("fixed_assets")
+}
+
+model BankStatementLine {
+  id                    String   @id @default(uuid())
+  tenantId              String   @map("tenant_id")
+  operationDate         String   @map("operation_date")
+  valueDate             String   @map("value_date")
+  description           String
+  debit                 Float    @default(0.0)
+  credit                Float    @default(0.0)
+  isReconciled          Boolean  @default(false) @map("is_reconciled")
+  reconciledEntryLineId String?  @map("reconciled_entry_line_id")
+  isDeleted             Boolean  @default(false) @map("is_deleted")
+  deletedAt             String?  @map("deleted_at")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("bank_statement_lines")
+}
+
+model FiscalAdjustment {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  year           Int
+  adjustmentType String   @map("adjustment_type") // REINTEGRATION, DEDUCTION
+  label          String
+  amount         Float    @default(0.0)
+  notes          String?
+  isDeleted      Boolean  @default(false) @map("is_deleted")
+  deletedAt      String?  @map("deleted_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("fiscal_adjustments")
+}
+
